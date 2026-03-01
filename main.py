@@ -2,8 +2,8 @@
 """
 WeatherMan - Weather Market Arbitrage
 
-Runs Agent-01 (scanner) + Agent-02 (fair value) + optionally Agent-03 (executor).
-Use --live to execute real trades (requires PRIVATE_KEY, FUNDER_ADDRESS).
+All tunable settings live in config.json (hot-reloaded every cycle).
+Use --live to execute real trades (requires PRIVATE_KEY, FUNDER_ADDRESS in .env).
 """
 
 import json
@@ -16,40 +16,56 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from agent_01_scanner.scanner import scan
 from agent_02_fair_value.edge import find_signals
+from shared import config as cfg
 from shared.ledger import Ledger
 from shared.models import Signal
 
 
 def run_cycle(
-    edge_threshold_pct: float = 10.0,
+    settings: dict,
     live: bool = False,
-    max_exposure: float = 10.0,
-    max_per_trade: float = 2.0,
     ledger: Ledger | None = None,
 ) -> list[Signal]:
-    """Run one scan + fair value cycle. Optionally execute in live mode."""
+    """Run one scan + fair value + optional execution cycle."""
     print(f"[{datetime.utcnow().isoformat()}Z] Scanning markets...")
     markets = scan()
-    print(f"  Found {len(markets)} weather markets")
+    print(f"  Found {len(markets)} weather markets (within 2-day window)")
 
     mappable = sum(1 for m in markets if m.coords and m.weather_type)
     print(f"  Mappable to NOAA: {mappable}")
 
-    signals = find_signals(markets, edge_threshold_pct=edge_threshold_pct)
+    signals = find_signals(
+        markets,
+        edge_threshold_pct=settings["edge_min_pct"],
+        entry_threshold=settings["entry_threshold"],
+    )
 
-    if live and signals and ledger:
-        from agent_03_executor.executor import execute_signal
+    if live and ledger:
+        from agent_03_executor.executor import check_exits, execute_signal
 
-        print(f"\n  LIVE MODE | Max exposure: ${max_exposure} | Per trade: ${max_per_trade}")
-        print(f"  Current exposure: ${ledger.total_exposure():.2f} ({ledger.trade_count()} trades)")
+        max_exposure = settings["max_exposure_usd"]
+        max_per_trade = settings["max_per_trade_usd"]
+        max_trades = settings["max_trades_per_run"]
+        exit_thresh = settings["exit_threshold"]
 
+        print(f"\n  LIVE MODE | Exposure cap: ${max_exposure} | Per trade: ${max_per_trade}")
+        print(f"  Current exposure: ${ledger.total_exposure():.2f} ({len(ledger.open_positions())} open)")
+
+        # --- Exit scan: sell positions that crossed exit_threshold ---
+        exited = check_exits(ledger, exit_thresh)
+        if exited:
+            print(f"  Closed {exited} position(s) (exit threshold {exit_thresh:.0%})")
+
+        # --- Entry scan: buy new positions (capped at max_trades_per_run) ---
         executed = 0
         for s in signals:
+            if executed >= max_trades:
+                break
             if execute_signal(s, max_exposure, max_per_trade, ledger):
                 executed += 1
-                print(f"    EXECUTED {s.side}: {s.question[:50]}... @ {s.market_price:.2f}")
+                print(f"    BUY {s.side}: {s.question[:50]}... @ {s.market_price:.2f}")
         if executed:
-            print(f"  Placed {executed} order(s)")
+            print(f"  Placed {executed} order(s) (limit {max_trades}/run)")
         elif signals:
             print("  No orders placed (limits or already traded)")
 
@@ -61,12 +77,8 @@ def main():
 
     parser = argparse.ArgumentParser(description="WeatherMan weather market arbitrage")
     parser.add_argument("--once", action="store_true", help="Run once and exit")
-    parser.add_argument("--interval", type=int, default=600, help="Seconds between scans")
-    parser.add_argument("--edge", type=float, default=10.0, help="Min edge %% to signal")
-    parser.add_argument("--log", type=str, default="signals.jsonl", help="Log file for signals")
     parser.add_argument("--live", action="store_true", help="Execute real trades (requires .env)")
-    parser.add_argument("--balance", type=float, default=10.0, help="Max exposure cap in USD (live mode)")
-    parser.add_argument("--max-per-trade", type=float, default=2.0, help="Max USD per trade (live mode)")
+    parser.add_argument("--log", type=str, default="signals.jsonl", help="Signal log file")
     args = parser.parse_args()
 
     # Load .env if present
@@ -83,19 +95,18 @@ def main():
     ledger = Ledger() if args.live else None
 
     if args.live:
-        ledger.set_initial_balance(args.balance)
         if not os.environ.get("PRIVATE_KEY") or not os.environ.get("FUNDER_ADDRESS"):
             print("ERROR: Live mode requires PRIVATE_KEY and FUNDER_ADDRESS in .env")
             sys.exit(1)
 
     def do_run():
-        signals = run_cycle(
-            edge_threshold_pct=args.edge,
-            live=args.live,
-            max_exposure=args.balance,
-            max_per_trade=args.max_per_trade,
-            ledger=ledger,
-        )
+        settings = cfg.load()
+
+        if args.live and ledger:
+            ledger.set_initial_balance(settings["max_exposure_usd"])
+
+        signals = run_cycle(settings=settings, live=args.live, ledger=ledger)
+
         if signals:
             print(f"\n  *** {len(signals)} SIGNAL(S) ***")
             for s in signals:
@@ -108,6 +119,7 @@ def main():
                             {
                                 "timestamp": s.timestamp.isoformat(),
                                 "condition_id": s.condition_id,
+                                "event_id": s.event_id,
                                 "question": s.question,
                                 "side": s.side,
                                 "token_id": s.token_id,
@@ -122,6 +134,8 @@ def main():
         else:
             print("  No signals above threshold")
 
+        return settings
+
     if args.once:
         do_run()
         return
@@ -130,9 +144,10 @@ def main():
         import time
 
         while True:
-            do_run()
-            print(f"\n  Next scan in {args.interval}s...")
-            time.sleep(args.interval)
+            settings = do_run()
+            interval = settings["scan_interval_seconds"]
+            print(f"\n  Next scan in {interval}s...")
+            time.sleep(interval)
     except KeyboardInterrupt:
         print("\nStopped.")
 

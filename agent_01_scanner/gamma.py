@@ -28,6 +28,7 @@ def extract_markets_from_events(events: list[dict]) -> list[dict]:
     markets = []
     for event in events:
         event_title = event.get("title", "")
+        event_id = str(event.get("id") or event.get("slug") or event_title)
         for market in event.get("markets", []):
             condition_id = market.get("conditionId") or market.get("condition_id")
             raw_clob = market.get("clobTokenIds") or market.get("clob_token_ids") or "[]"
@@ -46,6 +47,7 @@ def extract_markets_from_events(events: list[dict]) -> list[dict]:
                 "yes_token_id": str(clob_ids[0]),
                 "no_token_id": str(clob_ids[1]),
                 "event_title": event_title,
+                "event_id": event_id,
                 "volume_24hr": float(market.get("volume24hr") or market.get("volume_24hr") or 0),
                 "liquidity": float(market.get("liquidity") or 0),
                 "end_date_iso": market.get("endDateIso") or market.get("endDate") or market.get("end_date"),

@@ -23,13 +23,67 @@ CITY_COORDS = {
 }
 
 
+def _parse_thresholds(q: str, weather_type: str | None) -> tuple[float | None, float | None]:
+    """Extract numeric threshold_low and threshold_high from a question string."""
+    low, high = None, None
+
+    if weather_type == "precipitation":
+        # "3+ inches", "3 or more inches", "at least 3 inches"
+        m = re.search(r"(\d+\.?\d*)\s*\+\s*inch", q)
+        if m:
+            low = float(m.group(1))
+            return low, None
+        m = re.search(r"(?:at least|or more than?|over|above|more than|exceed)\s*(\d+\.?\d*)\s*inch", q)
+        if m:
+            low = float(m.group(1))
+            return low, None
+        # "between 3 and 5 inches", "3 to 5 inches"
+        m = re.search(r"(\d+\.?\d*)\s*(?:to|-)\s*(\d+\.?\d*)\s*inch", q)
+        if m:
+            return float(m.group(1)), float(m.group(2))
+        # "under 2 inches", "less than 2 inches"
+        m = re.search(r"(?:under|less than|below|fewer than)\s*(\d+\.?\d*)\s*inch", q)
+        if m:
+            high = float(m.group(1))
+            return None, high
+
+    elif weather_type == "temperature":
+        # "between 40 and 45", "40 to 45 degrees"
+        m = re.search(r"(\d+)\s*(?:to|-)\s*(\d+)\s*(?:°|degree|f\b)", q)
+        if m:
+            return float(m.group(1)), float(m.group(2))
+        # "hit 90°F", "reach 90", "above 90", "over 90"
+        m = re.search(r"(?:hit|reach|above|over|exceed|at least)\s*(\d+)\s*(?:°|degree|f\b)?", q)
+        if m:
+            return float(m.group(1)), None
+        # "below 32", "under 40"
+        m = re.search(r"(?:below|under|less than)\s*(\d+)\s*(?:°|degree|f\b)?", q)
+        if m:
+            return None, float(m.group(1))
+        # Bare range: "40-45" anywhere
+        m = re.search(r"(\d+)\s*-\s*(\d+)", q)
+        if m:
+            a, b = float(m.group(1)), float(m.group(2))
+            if 0 <= a <= 150 and 0 <= b <= 150:
+                return a, b
+
+    return low, high
+
+
 def parse_question(question: str) -> dict:
     """
-    Extract location, weather_type, target_date from market question.
-    Returns dict with keys that may be None if not found.
+    Extract location, weather_type, target_date, and numeric thresholds
+    from a market question.
     """
     q = question.lower().strip()
-    result = {"location": None, "weather_type": None, "target_date": None, "coords": None}
+    result = {
+        "location": None,
+        "weather_type": None,
+        "target_date": None,
+        "coords": None,
+        "threshold_low": None,
+        "threshold_high": None,
+    }
 
     # Location: check known cities (use word boundary for short names like "la")
     words = set(re.split(r"\W+", q))
@@ -51,6 +105,11 @@ def parse_question(question: str) -> dict:
     elif "arctic" in q or "sea ice" in q:
         result["weather_type"] = "sea_ice"
 
+    # Numeric thresholds (e.g. "3+ inches", "40 to 45 degrees")
+    low, high = _parse_thresholds(q, result["weather_type"])
+    result["threshold_low"] = low
+    result["threshold_high"] = high
+
     # Target date: month names, "February", "March", etc.
     months = {
         "january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
@@ -58,9 +117,7 @@ def parse_question(question: str) -> dict:
     }
     for month_name, num in months.items():
         if month_name in q:
-            # Default to current year
             year = datetime.utcnow().year
-            # Check for year in question (e.g. "February 2026")
             year_match = re.search(r"20[2-3][0-9]", q)
             if year_match:
                 year = int(year_match.group())

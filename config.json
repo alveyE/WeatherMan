@@ -1,0 +1,9 @@
+{
+  "entry_threshold": 0.40,
+  "exit_threshold": 0.80,
+  "max_per_trade_usd": 2.00,
+  "max_trades_per_run": 5,
+  "scan_interval_seconds": 120,
+  "max_exposure_usd": 10.00,
+  "edge_min_pct": 10.0
+}

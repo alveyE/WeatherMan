@@ -19,11 +19,14 @@ class ScannedMarket:
     liquidity: float
     end_date_iso: Optional[str]
     event_title: str
+    event_id: Optional[str] = None
     # Parsed fields (may be None if unparseable)
     location: Optional[str] = None
     weather_type: Optional[str] = None
     target_date: Optional[str] = None
     coords: Optional[tuple[float, float]] = None  # (lat, lon) for NOAA
+    threshold_low: Optional[float] = None
+    threshold_high: Optional[float] = None
 
 
 @dataclass
@@ -38,4 +41,5 @@ class Signal:
     fair_value: float
     edge_pct: float
     confidence: float
+    event_id: Optional[str] = None
     timestamp: datetime = field(default_factory=datetime.utcnow)
