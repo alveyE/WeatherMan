@@ -100,3 +100,56 @@ class Ledger:
 
     def trade_count(self) -> int:
         return len(self._data["trades"])
+
+    # ------------------------------------------------------------------
+    # P&L
+    # ------------------------------------------------------------------
+
+    def pnl_summary(self) -> dict:
+        """
+        Compute portfolio-level P&L stats.  Returns dict with:
+          total_spent, total_returned, realized_pnl,
+          unrealized_value, wins, losses, open_count, closed_count
+        """
+        total_spent = 0.0
+        total_returned = 0.0
+        wins = 0
+        losses = 0
+        open_count = 0
+        unrealized_value = 0.0
+
+        for t in self._data["trades"]:
+            cost = t.get("cost_usd", 0)
+            total_spent += cost
+
+            if t.get("status") == "closed":
+                sell_price = t.get("sell_price", 0)
+                returned = sell_price * t.get("size", 0)
+                total_returned += returned
+                if returned > cost:
+                    wins += 1
+                else:
+                    losses += 1
+            else:
+                open_count += 1
+                unrealized_value += t.get("mark_price", t.get("price", 0)) * t.get("size", 0)
+
+        return {
+            "total_spent": round(total_spent, 2),
+            "total_returned": round(total_returned, 2),
+            "realized_pnl": round(total_returned - (total_spent - self.total_exposure()), 2),
+            "unrealized_value": round(unrealized_value, 2),
+            "open_exposure": round(self.total_exposure(), 2),
+            "wins": wins,
+            "losses": losses,
+            "open_count": open_count,
+            "closed_count": wins + losses,
+        }
+
+    def update_mark(self, condition_id: str, mark_price: float):
+        """Update the latest market price on an open position (for unrealized P&L)."""
+        for t in self._data["trades"]:
+            if t["condition_id"] == condition_id and t.get("status") == "open":
+                t["mark_price"] = mark_price
+                break
+        self._save()

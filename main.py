@@ -3,6 +3,7 @@
 WeatherMan - Weather Market Arbitrage
 
 All tunable settings live in config.json (hot-reloaded every cycle).
+Paper mode (default) simulates trades with real market data and tracks P&L.
 Use --live to execute real trades (requires PRIVATE_KEY, FUNDER_ADDRESS in .env).
 """
 
@@ -21,13 +22,31 @@ from shared.ledger import Ledger
 from shared.models import Signal
 
 
+def _print_pnl(ledger: Ledger, mode: str):
+    """Print portfolio P&L dashboard."""
+    s = ledger.pnl_summary()
+    total_trades = s["closed_count"] + s["open_count"]
+    win_rate = (s["wins"] / s["closed_count"] * 100) if s["closed_count"] else 0
+
+    print(f"\n  {'=' * 50}")
+    print(f"  [{mode}] PORTFOLIO")
+    print(f"  {'=' * 50}")
+    print(f"  Open positions:   {s['open_count']}  (exposure ${s['open_exposure']:.2f})")
+    print(f"  Closed trades:    {s['closed_count']}  ({s['wins']}W / {s['losses']}L — {win_rate:.0f}% win rate)")
+    print(f"  Total trades:     {total_trades}")
+    print(f"  Realized P&L:     ${s['realized_pnl']:+.2f}")
+    print(f"  Unrealized value: ${s['unrealized_value']:.2f}")
+    print(f"  {'=' * 50}")
+
+
 def run_cycle(
     settings: dict,
-    live: bool = False,
-    ledger: Ledger | None = None,
+    live: bool,
+    ledger: Ledger,
 ) -> list[Signal]:
-    """Run one scan + fair value + optional execution cycle."""
-    print(f"[{datetime.utcnow().isoformat()}Z] Scanning markets...")
+    """Run one full scan + fair value + execution cycle (paper or live)."""
+    mode = "LIVE" if live else "PAPER"
+    print(f"[{datetime.utcnow().isoformat()}Z] Scanning markets... ({mode})")
     markets = scan()
     print(f"  Found {len(markets)} weather markets (within 2-day window)")
 
@@ -40,34 +59,46 @@ def run_cycle(
         entry_threshold=settings["entry_threshold"],
     )
 
-    if live and ledger:
+    max_exposure = settings["max_exposure_usd"]
+    max_per_trade = settings["max_per_trade_usd"]
+    max_trades = settings["max_trades_per_run"]
+    exit_thresh = settings["exit_threshold"]
+
+    print(f"\n  Exposure cap: ${max_exposure} | Per trade: ${max_per_trade} | "
+          f"Entry ≤ {settings['entry_threshold']:.0%} | Exit ≥ {exit_thresh:.0%}")
+    print(f"  Current exposure: ${ledger.total_exposure():.2f} ({len(ledger.open_positions())} open)")
+
+    # --- Exit scan ---
+    if live:
         from agent_03_executor.executor import check_exits, execute_signal
-
-        max_exposure = settings["max_exposure_usd"]
-        max_per_trade = settings["max_per_trade_usd"]
-        max_trades = settings["max_trades_per_run"]
-        exit_thresh = settings["exit_threshold"]
-
-        print(f"\n  LIVE MODE | Exposure cap: ${max_exposure} | Per trade: ${max_per_trade}")
-        print(f"  Current exposure: ${ledger.total_exposure():.2f} ({len(ledger.open_positions())} open)")
-
-        # --- Exit scan: sell positions that crossed exit_threshold ---
         exited = check_exits(ledger, exit_thresh)
-        if exited:
-            print(f"  Closed {exited} position(s) (exit threshold {exit_thresh:.0%})")
+    else:
+        from agent_03_executor.paper import paper_check_exits, paper_execute_signal
+        exited = paper_check_exits(ledger, exit_thresh)
 
-        # --- Entry scan: buy new positions (capped at max_trades_per_run) ---
-        executed = 0
-        for s in signals:
-            if executed >= max_trades:
-                break
-            if execute_signal(s, max_exposure, max_per_trade, ledger):
-                executed += 1
-                print(f"    BUY {s.side}: {s.question[:50]}... @ {s.market_price:.2f}")
-        if executed:
-            print(f"  Placed {executed} order(s) (limit {max_trades}/run)")
-        elif signals:
-            print("  No orders placed (limits or already traded)")
+    if exited:
+        print(f"  Closed {exited} position(s) (exit threshold {exit_thresh:.0%})")
+
+    # --- Entry scan (capped at max_trades_per_run) ---
+    executed = 0
+    for s in signals:
+        if executed >= max_trades:
+            break
+        if live:
+            ok = execute_signal(s, max_exposure, max_per_trade, ledger)
+        else:
+            ok = paper_execute_signal(s, max_exposure, max_per_trade, ledger)
+        if ok:
+            executed += 1
+            print(f"    [{mode} BUY] {s.side}: {s.question[:50]}... @ {s.market_price:.2f}")
+
+    if executed:
+        print(f"  Placed {executed} order(s) (limit {max_trades}/run)")
+    elif signals:
+        print("  No orders placed (limits or already traded)")
+
+    # --- P&L dashboard ---
+    _print_pnl(ledger, mode)
 
     return signals
 
@@ -92,18 +123,18 @@ def main():
                     os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
     log_path = Path(args.log)
-    ledger = Ledger() if args.live else None
 
     if args.live:
         if not os.environ.get("PRIVATE_KEY") or not os.environ.get("FUNDER_ADDRESS"):
             print("ERROR: Live mode requires PRIVATE_KEY and FUNDER_ADDRESS in .env")
             sys.exit(1)
+        ledger = Ledger("ledger.json")
+    else:
+        ledger = Ledger("paper_ledger.json")
 
     def do_run():
         settings = cfg.load()
-
-        if args.live and ledger:
-            ledger.set_initial_balance(settings["max_exposure_usd"])
+        ledger.set_initial_balance(settings["max_exposure_usd"])
 
         signals = run_cycle(settings=settings, live=args.live, ledger=ledger)
 
