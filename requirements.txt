@@ -1,2 +1,3 @@
-# WeatherMan - Weather Market Arbitrage (paper trading PoC)
+# WeatherMan - Weather Market Arbitrage
 requests>=2.31.0
+py-clob-client>=0.20.0

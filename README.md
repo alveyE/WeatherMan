@@ -1,28 +1,45 @@
-# WeatherMan — Paper Trading PoC
+# WeatherMan — Weather Market Arbitrage
 
-Weather market arbitrage: exploit the lag between NOAA forecast updates (every 6 hours) and Polymarket repricing.
+Exploit the lag between NOAA forecast updates (every 6 hours) and Polymarket repricing.
 
-**This is a proof-of-concept.** No real money. No private keys. No execution.
-
-## Quick Start
+## Quick Start (Paper Mode)
 
 ```bash
-pip install requests
+pip install -r requirements.txt
 python main.py --once --edge 10
 ```
 
-- `--once`: Run one scan and exit
-- `--edge 10`: Only signal when edge > 10% (default)
-- `--interval 600`: When looping, scan every 10 minutes
-- `--log signals.jsonl`: Append signals to this file
+## Live Trading
+
+```bash
+# 1. Copy env template
+cp .env.example .env
+
+# 2. Add your Polymarket credentials to .env
+#    - PRIVATE_KEY: Export from polymarket.com/settings
+#    - FUNDER_ADDRESS: Your proxy wallet address (shown in Polymarket profile)
+
+# 3. Deposit USDC to your Polymarket account
+
+# 4. Run with --live and balance cap
+python main.py --live --balance 10 --max-per-trade 2 --once
+```
+
+### Live Mode Options
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--live` | off | Execute real trades |
+| `--balance` | 10 | Max total exposure in USD (cap) |
+| `--max-per-trade` | 2 | Max USD per single trade |
+
+The bot tracks exposure in `ledger.json` and will not place new trades once total exposure reaches your cap.
 
 ## What It Does
 
-1. **Agent-01 (Scanner)**: Fetches ~100 weather markets from Polymarket, gets orderbook mid prices
-2. **Agent-02 (Fair Value)**: For precipitation markets (NYC, Seattle, etc.), fetches NOAA forecast and computes fair value from probability-of-precipitation
-3. **Signals**: When `|fair_value - market_price| > edge_threshold`, logs a signal
-
-No Agent-03 (execution) — paper mode only.
+1. **Agent-01**: Scans Polymarket weather markets, fetches orderbook prices
+2. **Agent-02**: Computes fair value from NOAA forecast (PoP for precipitation)
+3. **Agent-03** (live only): Places limit orders when edge > threshold, respects balance cap
 
 ## Output
 
@@ -30,23 +47,17 @@ No Agent-03 (execution) — paper mode only.
 [2026-03-01T06:30:00Z] Scanning markets...
   Found 98 weather markets
   Mappable to NOAA: 17
-  *** 3 SIGNAL(S) ***
-    BUY_NO: Will NYC have between 3 and 4 inches...
+
+  LIVE MODE | Max exposure: $10 | Per trade: $2
+  Current exposure: $0.00 (0 trades)
+  *** 2 SIGNAL(S) ***
+    EXECUTED BUY_NO: Will NYC have between 3 and 4 inches...
+    [LIVE] BUY_NO: Will Seattle have less than 3 inches...
       Market: 0.15 | Fair: 0.08 | Edge: 12.3%
 ```
 
-Signals are also appended to `signals.jsonl`.
+## Security
 
-## Limitations (PoC)
-
-- **Fair value**: For "Will NYC have between 3–4 inches in February?", we use average daily PoP as a rough proxy. Real fair value would need historical distribution + forecast.
-- **Markets**: Only precipitation markets with known cities (NYC, Seattle, Austin, etc.) are mapped.
-- **No execution**: Add Agent-03 and `py-clob-client` when ready for live trading.
-
-## Next Steps
-
-1. Run for 24–48 hours, collect signals
-2. Manually track: would these have been profitable?
-3. Tune `--edge` threshold
-4. Add more cities to `agent_01_scanner/parser.py`
-5. When confident: add Agent-03 with real execution (small size first)
+- Never commit `.env` or `ledger.json`
+- Start with small balance ($10–25)
+- Polymarket is non-custodial — you control the wallet
