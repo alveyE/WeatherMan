@@ -31,28 +31,33 @@ def _parse_thresholds(q: str, weather_type: str | None) -> tuple[float | None, f
         # "3+ inches", "3 or more inches", "at least 3 inches"
         m = re.search(r"(\d+\.?\d*)\s*\+\s*inch", q)
         if m:
-            low = float(m.group(1))
-            return low, None
+            return float(m.group(1)), None
         m = re.search(r"(?:at least|or more than?|over|above|more than|exceed)\s*(\d+\.?\d*)\s*inch", q)
         if m:
-            low = float(m.group(1))
-            return low, None
-        # "between 3 and 5 inches", "3 to 5 inches"
-        m = re.search(r"(\d+\.?\d*)\s*(?:to|-)\s*(\d+\.?\d*)\s*inch", q)
+            return float(m.group(1)), None
+        # "between 4 and 5 inches", "4 to 5 inches", "4-5 inches"
+        m = re.search(r"(?:between\s+)?(\d+\.?\d*)\s*(?:and|to|-)\s*(\d+\.?\d*)\s*inch", q)
         if m:
             return float(m.group(1)), float(m.group(2))
         # "under 2 inches", "less than 2 inches"
         m = re.search(r"(?:under|less than|below|fewer than)\s*(\d+\.?\d*)\s*inch", q)
         if m:
-            high = float(m.group(1))
-            return None, high
+            return None, float(m.group(1))
 
     elif weather_type == "temperature":
-        # "between 40 and 45", "40 to 45 degrees"
-        m = re.search(r"(\d+)\s*(?:to|-)\s*(\d+)\s*(?:°|degree|f\b)", q)
+        # "between 28-29°F", "between 28 and 29", "40 to 45 degrees"
+        m = re.search(r"(?:between\s+)?(\d+)\s*(?:and|to|-)\s*(\d+)\s*(?:°|degree|f\b)", q)
         if m:
             return float(m.group(1)), float(m.group(2))
-        # "hit 90°F", "reach 90", "above 90", "over 90"
+        # "27°f or below", "32°f or lower"
+        m = re.search(r"(\d+)\s*°?\s*f?\s*or\s+(?:below|lower|less)", q)
+        if m:
+            return None, float(m.group(1))
+        # "50°f or above", "50°f or higher"
+        m = re.search(r"(\d+)\s*°?\s*f?\s*or\s+(?:above|higher|more)", q)
+        if m:
+            return float(m.group(1)), None
+        # "hit 90°F", "reach 90", "above 90", "over 90", "at least 90"
         m = re.search(r"(?:hit|reach|above|over|exceed|at least)\s*(\d+)\s*(?:°|degree|f\b)?", q)
         if m:
             return float(m.group(1)), None

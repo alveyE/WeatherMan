@@ -8,6 +8,7 @@ _CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.json"
 DEFAULTS = {
     "entry_threshold": 0.15,
     "exit_threshold": 0.45,
+    "min_price": 0.04,
     "max_per_trade_usd": 2.00,
     "max_trades_per_run": 5,
     "scan_interval_seconds": 120,

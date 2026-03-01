@@ -22,9 +22,10 @@ def mid_from_book(book: dict) -> float | None:
     asks = book.get("asks", [])
     if not bids or not asks:
         return None
-    # Bids sorted desc, asks sorted asc - first is best
-    best_bid = float(bids[0].get("price", 0))
-    best_ask = float(asks[0].get("price", 1))
+    best_bid = max(float(b.get("price", 0)) for b in bids)
+    best_ask = min(float(a.get("price", 1)) for a in asks)
+    if best_bid >= best_ask:
+        return (best_bid + best_ask) / 2
     return (best_bid + best_ask) / 2
 
 

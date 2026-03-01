@@ -100,11 +100,12 @@ def find_signals(
     markets: list[ScannedMarket],
     edge_threshold_pct: float = 10.0,
     entry_threshold: float = 1.0,
+    min_price: float = 0.04,
 ) -> list[Signal]:
     """
     For each market compute fair value, emit signal if edge > threshold
-    and market price <= entry_threshold, then keep only the single best
-    signal per event.
+    and min_price <= market price <= entry_threshold, then keep only the
+    single best signal per event.
     """
     raw_signals: list[Signal] = []
 
@@ -130,7 +131,7 @@ def find_signals(
             price = m.no_mid
             fair = 1 - fair
 
-        if price > entry_threshold:
+        if price < min_price or price > entry_threshold:
             continue
 
         raw_signals.append(

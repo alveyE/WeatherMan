@@ -57,6 +57,7 @@ def run_cycle(
         markets,
         edge_threshold_pct=settings["edge_min_pct"],
         entry_threshold=settings["entry_threshold"],
+        min_price=settings["min_price"],
     )
 
     max_exposure = settings["max_exposure_usd"]
