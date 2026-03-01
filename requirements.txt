@@ -1,0 +1,2 @@
+# WeatherMan - Weather Market Arbitrage (paper trading PoC)
+requests>=2.31.0
