@@ -84,6 +84,10 @@ def compute_fair_value(market: ScannedMarket) -> float | None:
         target_iso = None
         if market.target_date and len(market.target_date) >= 10:
             target_iso = market.target_date[:10]
+        elif market.end_date_iso and len(market.end_date_iso) >= 10:
+            target_iso = market.end_date_iso[:10]
+        if target_iso is None:
+            return None
         forecast_f = get_forecast_temperature_f(lat, lon, target_date=target_iso)
         if forecast_f is None:
             return None

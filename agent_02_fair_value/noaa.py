@@ -165,10 +165,12 @@ def get_forecast_temperature_f(
 ) -> float | None:
     """
     Return the forecast high temperature in Fahrenheit for *target_date*
-    (ISO date string like '2026-03-02') or, if None, for the next daytime
-    period.  Uses the 7-day textual forecast since it already separates
-    daytime/nighttime highs and lows.
+    (ISO date string like '2026-03-02').
+    Returns None if target_date is not provided or no matching period found.
     """
+    if not target_date:
+        return None
+
     periods = get_forecast(lat, lon)
     if not periods:
         return None
@@ -182,12 +184,8 @@ def get_forecast_temperature_f(
         except (ValueError, TypeError):
             continue
 
-        if target_date:
-            if dt.strftime("%Y-%m-%d") == target_date:
-                return float(p["temperature"])
-        else:
-            if dt >= datetime.now(timezone.utc):
-                return float(p["temperature"])
+        if dt.strftime("%Y-%m-%d") == target_date:
+            return float(p["temperature"])
 
     return None
 

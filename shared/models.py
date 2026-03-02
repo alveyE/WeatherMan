@@ -1,7 +1,7 @@
 """Shared data models for WeatherMan."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 
@@ -42,4 +42,4 @@ class Signal:
     edge_pct: float
     confidence: float
     event_id: Optional[str] = None
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))

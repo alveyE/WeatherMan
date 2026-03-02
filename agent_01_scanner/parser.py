@@ -1,7 +1,7 @@
 """Parse market questions into location, weather_type, target_date."""
 
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 
 # City -> (lat, lon) for common weather market locations
 CITY_COORDS = {
@@ -115,28 +115,31 @@ def parse_question(question: str) -> dict:
     result["threshold_low"] = low
     result["threshold_high"] = high
 
-    # Target date: month names, "February", "March", etc.
+    # Target date: extract full date when possible (month + day)
     months = {
         "january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
         "july": 7, "august": 8, "september": 9, "october": 10, "november": 11, "december": 12,
     }
-    for month_name, num in months.items():
-        if month_name in q:
-            year = datetime.utcnow().year
-            year_match = re.search(r"20[2-3][0-9]", q)
-            if year_match:
-                year = int(year_match.group())
-            result["target_date"] = f"{year}-{num:02d}"
-            break
+    month_pattern = "|".join(months.keys())
 
-    # "by May 31" style
-    by_match = re.search(r"by\s+(\w+)\s+(\d{1,2})", q)
-    if by_match and not result["target_date"]:
-        month_str, day = by_match.group(1), by_match.group(2)
+    year_match = re.search(r"20[2-3][0-9]", q)
+    year = int(year_match.group()) if year_match else datetime.now(timezone.utc).year
+
+    # "on March 2", "March 2nd", "march 2, 2026", "by March 15"
+    # Negative lookahead prevents matching year digits (e.g. "february 2026")
+    day_match = re.search(
+        rf"(?:on|by)?\s*({month_pattern})\s+(\d{{1,2}})(?:st|nd|rd|th)?(?!\d)",
+        q,
+    )
+    if day_match:
+        month_num = months[day_match.group(1)]
+        day_num = int(day_match.group(2))
+        result["target_date"] = f"{year}-{month_num:02d}-{day_num:02d}"
+    else:
+        # Fallback: month only -> "2026-03"
         for month_name, num in months.items():
-            if month_name.startswith(month_str[:3]):
-                year = datetime.utcnow().year
-                result["target_date"] = f"{year}-{num:02d}-{int(day):02d}"
+            if month_name in q:
+                result["target_date"] = f"{year}-{num:02d}"
                 break
 
     return result

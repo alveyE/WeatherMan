@@ -10,7 +10,7 @@ Use --live to execute real trades (requires PRIVATE_KEY, FUNDER_ADDRESS in .env)
 import json
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -46,7 +46,7 @@ def run_cycle(
 ) -> list[Signal]:
     """Run one full scan + fair value + execution cycle (paper or live)."""
     mode = "LIVE" if live else "PAPER"
-    print(f"[{datetime.utcnow().isoformat()}Z] Scanning markets... ({mode})")
+    print(f"[{datetime.now(timezone.utc).isoformat()}] Scanning markets... ({mode})")
     markets = scan()
     print(f"  Found {len(markets)} weather markets (within 2-day window)")
 

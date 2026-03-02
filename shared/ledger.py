@@ -1,7 +1,7 @@
 """Track trades and exposure for balance cap."""
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -56,7 +56,7 @@ class Ledger:
             "size": size,
             "cost_usd": round(cost, 2),
             "question": question[:80],
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "status": "open",
         }
         if event_id:
@@ -70,7 +70,7 @@ class Ledger:
             if t["condition_id"] == condition_id and t.get("status") == "open":
                 t["status"] = "closed"
                 t["sell_price"] = sell_price
-                t["closed_at"] = datetime.utcnow().isoformat()
+                t["closed_at"] = datetime.now(timezone.utc).isoformat()
                 break
         self._save()
 
