@@ -149,6 +149,7 @@ def find_signals(
                 edge_pct=edge_pct,
                 confidence=min(edge_pct / 20.0, 1.0),
                 event_id=m.event_id,
+                end_date_iso=m.end_date_iso,
             )
         )
 

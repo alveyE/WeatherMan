@@ -60,6 +60,7 @@ def execute_signal(
             size=size,
             question=signal.question,
             event_id=signal.event_id,
+            end_date_iso=signal.end_date_iso,
         )
         return True
     except Exception as e:

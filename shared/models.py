@@ -42,4 +42,5 @@ class Signal:
     edge_pct: float
     confidence: float
     event_id: Optional[str] = None
+    end_date_iso: Optional[str] = None
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))

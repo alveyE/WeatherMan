@@ -46,6 +46,7 @@ class Ledger:
         size: float,
         question: str,
         event_id: str | None = None,
+        end_date_iso: str | None = None,
     ):
         cost = price * size
         entry: dict = {
@@ -61,6 +62,8 @@ class Ledger:
         }
         if event_id:
             entry["event_id"] = event_id
+        if end_date_iso:
+            entry["end_date_iso"] = end_date_iso
         self._data["trades"].append(entry)
         self._save()
 

@@ -1,10 +1,50 @@
 """Fetch weather markets from Polymarket Gamma API."""
 
 import json
+from functools import lru_cache
+
 import requests
 
 GAMMA_URL = "https://gamma-api.polymarket.com"
 WEATHER_TAG_ID = "84"  # Polymarket "Weather" tag
+
+
+def check_market_resolution(token_id: str) -> dict | None:
+    """
+    Query Gamma for a specific market's resolution status using its CLOB token ID.
+    Returns {"closed": bool, "yes_price": float, "no_price": float} or None on failure.
+
+    For resolved markets, outcomePrices snaps to ["0","1"] or ["1","0"].
+    """
+    try:
+        resp = requests.get(
+            f"{GAMMA_URL}/markets",
+            params={"clob_token_ids": token_id},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if isinstance(data, list):
+            market = data[0] if data else None
+        else:
+            market = data
+        if not market:
+            return None
+
+        closed = bool(market.get("closed", False))
+        raw_prices = market.get("outcomePrices")
+        if isinstance(raw_prices, str):
+            raw_prices = json.loads(raw_prices)
+        if not raw_prices or len(raw_prices) < 2:
+            return {"closed": closed, "yes_price": None, "no_price": None}
+
+        return {
+            "closed": closed,
+            "yes_price": float(raw_prices[0]),
+            "no_price": float(raw_prices[1]),
+        }
+    except Exception:
+        return None
 
 
 def fetch_weather_events(limit: int = 100) -> list[dict]:
