@@ -135,6 +135,7 @@ class Ledger:
                 unrealized_value += t.get("mark_price", t.get("price", 0)) * t.get("size", 0)
 
         return {
+            "initial_balance": self._data.get("initial_balance", 0),
             "total_spent": round(total_spent, 2),
             "total_returned": round(total_returned, 2),
             "realized_pnl": round(total_returned - (total_spent - self.total_exposure()), 2),

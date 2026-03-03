@@ -27,15 +27,19 @@ def _print_pnl(ledger: Ledger, mode: str):
     s = ledger.pnl_summary()
     total_trades = s["closed_count"] + s["open_count"]
     win_rate = (s["wins"] / s["closed_count"] * 100) if s["closed_count"] else 0
+    balance = s["initial_balance"] + s["realized_pnl"] - s["open_exposure"]
+    portfolio_value = balance + s["unrealized_value"]
 
     print(f"\n  {'=' * 50}")
     print(f"  [{mode}] PORTFOLIO")
     print(f"  {'=' * 50}")
-    print(f"  Open positions:   {s['open_count']}  (exposure ${s['open_exposure']:.2f})")
+    print(f"  Cash balance:     ${balance:.2f}")
+    print(f"  + Open positions: ${s['unrealized_value']:.2f}  ({s['open_count']} positions)")
+    print(f"  = Portfolio value: ${portfolio_value:.2f}")
+    print(f"  {'-' * 50}")
+    print(f"  Realized P&L:     ${s['realized_pnl']:+.2f}")
     print(f"  Closed trades:    {s['closed_count']}  ({s['wins']}W / {s['losses']}L — {win_rate:.0f}% win rate)")
     print(f"  Total trades:     {total_trades}")
-    print(f"  Realized P&L:     ${s['realized_pnl']:+.2f}")
-    print(f"  Unrealized value: ${s['unrealized_value']:.2f}")
     print(f"  {'=' * 50}")
 
 
