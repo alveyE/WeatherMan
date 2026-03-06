@@ -9,6 +9,19 @@ pip install -r requirements.txt
 python main.py --once --edge 10
 ```
 
+### Linux / server (externally-managed Python)
+
+On Debian/Ubuntu and similar, use a virtual environment so you can install packages without `--break-system-packages`:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate   # on Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+python main.py --once
+```
+
+For live trading, after activating the venv run `python main.py --live`.
+
 ## Live Trading
 
 ```bash
