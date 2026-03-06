@@ -6,5 +6,6 @@
   "max_trades_per_run": 5,
   "scan_interval_seconds": 120,
   "max_exposure_usd": 10.00,
-  "edge_min_pct": 10.0
+  "edge_min_pct": 10.0,
+  "max_slippage": 0.03
 }

@@ -68,6 +68,7 @@ def run_cycle(
     max_per_trade = settings["max_per_trade_usd"]
     max_trades = settings["max_trades_per_run"]
     exit_thresh = settings["exit_threshold"]
+    max_slippage = settings.get("max_slippage", 0.03)
 
     print(f"\n  Exposure cap: ${max_exposure} | Per trade: ${max_per_trade} | "
           f"Entry ≤ {settings['entry_threshold']:.0%} | Exit ≥ {exit_thresh:.0%}")
@@ -90,7 +91,7 @@ def run_cycle(
         if executed >= max_trades:
             break
         if live:
-            ok = execute_signal(s, max_exposure, max_per_trade, ledger)
+            ok = execute_signal(s, max_exposure, max_per_trade, ledger, max_slippage)
         else:
             ok = paper_execute_signal(s, max_exposure, max_per_trade, ledger)
         if ok:
@@ -98,7 +99,7 @@ def run_cycle(
             print(f"    [{mode} BUY] {s.side}: {s.question[:50]}... @ {s.market_price:.2f}")
 
     if executed:
-        print(f"  Placed {executed} order(s) (limit {max_trades}/run)")
+        print(f"  Placed {executed} market order(s) (limit {max_trades}/run)")
     elif signals:
         print("  No orders placed (limits or already traded)")
 

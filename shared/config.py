@@ -14,6 +14,7 @@ DEFAULTS = {
     "scan_interval_seconds": 120,
     "max_exposure_usd": 10.00,
     "edge_min_pct": 10.0,
+    "max_slippage": 0.03,  # max cents above scan price for market buys (e.g. 0.03 = 3¢)
 }
 
 
