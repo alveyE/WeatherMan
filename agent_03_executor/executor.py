@@ -1,10 +1,45 @@
 """Agent-03: Execute trades on Polymarket CLOB."""
 
 from agent_01_scanner.clob import get_mid_price
+from agent_01_scanner.gamma import check_market_resolution
 from shared.ledger import Ledger
 from shared.models import Signal
 
 from .client import get_client
+
+
+def _resolve_position(pos: dict, ledger: Ledger) -> bool:
+    """
+    Check if a position's market has resolved on Polymarket.
+    If resolved, close the position at $1.00 (win) or $0.00 (loss).
+    """
+    token_id = pos["token_id"]
+    info = check_market_resolution(token_id)
+    if info is None or not info.get("closed"):
+        return False
+
+    yes_price = info.get("yes_price")
+    no_price = info.get("no_price")
+    if yes_price is None or no_price is None:
+        return False
+
+    if max(yes_price, no_price) < 0.95:
+        return False
+
+    side = pos.get("side", "")
+    if side == "BUY_YES":
+        sell_price = yes_price
+    elif side == "BUY_NO":
+        sell_price = no_price
+    else:
+        return False
+
+    sell_price = round(sell_price, 2)
+    ledger.close_position(pos["condition_id"], sell_price=sell_price)
+    profit = round((sell_price - pos["price"]) * pos["size"], 2)
+    tag = "WIN" if sell_price > 0.5 else "LOSS"
+    print(f"    [RESOLVED {tag}] {pos['question'][:50]}... → ${sell_price:.2f} (P&L ${profit:+.2f})")
+    return True
 
 
 def execute_signal(
@@ -83,7 +118,10 @@ def execute_signal(
 
 def check_exits(ledger: Ledger, exit_threshold: float) -> int:
     """
-    Scan open positions; sell any whose current market price >= exit_threshold.
+    Scan open positions:
+    1. If mid price >= exit_threshold → sell (take profit)
+    2. If orderbook empty (mid is None) → check Gamma for market resolution
+    3. Otherwise update mark price for unrealized P&L
     Returns number of positions closed.
     """
     positions = ledger.open_positions()
@@ -93,35 +131,42 @@ def check_exits(ledger: Ledger, exit_threshold: float) -> int:
     closed = 0
     for pos in positions:
         token_id = pos["token_id"]
+
+        mid = None
         try:
             mid = get_mid_price(token_id)
         except Exception:
-            continue
-        if mid is None:
-            continue
-        if mid < exit_threshold:
-            continue
+            pass
 
-        size = pos["size"]
-        try:
-            from py_clob_client.clob_types import OrderArgs, OrderType
-            from py_clob_client.order_builder.constants import SELL
+        if mid is not None:
+            ledger.update_mark(pos["condition_id"], mid)
 
-            client = get_client()
-            order = OrderArgs(
-                token_id=token_id,
-                price=round(mid, 2),
-                size=size,
-                side=SELL,
-            )
-            signed = client.create_order(order)
-            client.post_order(signed, OrderType.GTC)
+            if mid < exit_threshold:
+                continue
 
-            ledger.close_position(pos["condition_id"], sell_price=round(mid, 2))
-            closed += 1
-            profit = round((mid - pos["price"]) * size, 2)
-            print(f"    EXIT {pos['question'][:50]}... @ {mid:.2f} (profit ~${profit})")
-        except Exception as e:
-            print(f"    [EXIT ERROR] {e}")
+            size = pos["size"]
+            try:
+                from py_clob_client.clob_types import OrderArgs, OrderType
+                from py_clob_client.order_builder.constants import SELL
+
+                client = get_client()
+                order = OrderArgs(
+                    token_id=token_id,
+                    price=round(mid, 2),
+                    size=size,
+                    side=SELL,
+                )
+                signed = client.create_order(order)
+                client.post_order(signed, OrderType.GTC)
+
+                ledger.close_position(pos["condition_id"], sell_price=round(mid, 2))
+                closed += 1
+                profit = round((mid - pos["price"]) * size, 2)
+                print(f"    [EXIT] {pos['question'][:50]}... @ {mid:.2f} (profit ~${profit})")
+            except Exception as e:
+                print(f"    [EXIT ERROR] {e}")
+        else:
+            if _resolve_position(pos, ledger):
+                closed += 1
 
     return closed
